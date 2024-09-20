@@ -7,6 +7,11 @@
 
 #define MASTER_FILE "master.txt"
 
+typedef struct {
+    char* username;
+    char* enctrypted_password;
+} PasswordEntry;
+
 
 // Simple hash function
 unsigned long hash(char *str) { // We define the return value beofre we start the function
@@ -24,6 +29,27 @@ void encrypt_decrypt(char *data, char *key) {
     int key_len = strlen(key);
     for (int i = 0; i < data_len; i++) {
         data[i] = data[i] ^ key[i % key_len];
+    }
+}
+
+PasswordEntry* create_password_entry(const char* username, const char* password) {
+    PasswordEntry* entry = (PasswordEntry*)malloc(sizeof(PasswordEntry));
+    if(entry == NULL){
+        fprintf(stderr, "Memory allocation failed\n");
+        return NULL;
+    }
+
+    entry->username = strdup(username);
+    entry->enctrypted_password = strdup(password);
+
+    return entry;
+}
+
+void free_password_entry(PasswordEntry* entry){
+    if(entry){
+        free(entry->username);
+        free(entry->enctrypted_password);
+        free(entry);
     }
 }
 
@@ -58,10 +84,8 @@ void set_master_password() {
     printf("Master password set successfully!\n");
 }
 
-void save_password(char *username, char *password, char *master_password) {
-    char encrypted_password[MAX_LINE];
-    strcpy(encrypted_password, password);
-    encrypt_decrypt(encrypted_password, master_password);
+void save_password(PasswordEntry* entry, char* master_password) {
+    encrypt_decrypt(entry->enctrypted_password, master_password);
     
     FILE *file = fopen(FILENAME, "a");
     if (file == NULL) {
@@ -69,17 +93,19 @@ void save_password(char *username, char *password, char *master_password) {
         return;
     }
     
-    // Write the encrypted password as hexadecimal values
-    fprintf(file, "%s:", username);
-    for (int i = 0; i < strlen(encrypted_password); i++) {
-        fprintf(file, "%02x", (unsigned char)encrypted_password[i]);
+    // Convert encrypted password to hexadecimal string
+    char hex_password[MAX_LINE * 2 + 1];  // Each byte becomes two hex characters
+    int len = strlen(entry->enctrypted_password);
+    for (int i = 0; i < len; i++) {
+        sprintf(hex_password + (i * 2), "%02x", (unsigned char)entry->enctrypted_password[i]);
     }
-    fprintf(file, "\n");
+    
+    fprintf(file, "%s:%s\n", entry->username, hex_password);
     
     fclose(file);
 }
 
-char *get_password(char *username, char *master_password) {
+PasswordEntry* get_password(char *username, char *master_password) {
     FILE *file = fopen(FILENAME, "r");
     if (file == NULL) {
         printf("Error opening file!\n");
@@ -89,7 +115,6 @@ char *get_password(char *username, char *master_password) {
     char line[MAX_LINE];
     char stored_username[MAX_LINE];
     char encrypted_password[MAX_LINE];
-    static char decrypted_password[MAX_LINE];
 
     while (fgets(line, sizeof(line), file)) {
         char *colon = strchr(line, ':');
@@ -105,13 +130,17 @@ char *get_password(char *username, char *master_password) {
             
             // Convert hexadecimal string back to bytes
             int len = strlen(encrypted_password) / 2;
+            char* decrypted_password = (char*)malloc(len + 1);
             for (int i = 0; i < len; i++) {
-                sscanf(encrypted_password + 2*i, "%2hhx", &decrypted_password[i]);
+                sscanf(encrypted_password + (i * 2), "%2hhx", (unsigned char*)&decrypted_password[i]);
             }
             decrypted_password[len] = '\0';
             
             encrypt_decrypt(decrypted_password, master_password);
-            return decrypted_password;
+
+            PasswordEntry* entry = create_password_entry(username, decrypted_password);
+            free(decrypted_password);
+            return entry;
         }
     }
 
@@ -160,12 +189,19 @@ int main() {
                     fgets(password, sizeof(password), stdin);
                     password[strcspn(password, "\n")] = 0;
 
-                    save_password(username, password, master_password);
-                    printf("Password saved successfully!\n");
+                    PasswordEntry* entry = create_password_entry(username, password);
+                    if(entry){
+                        save_password(entry, master_password);
+                        printf("Password saved successfully!\n");
+                        free_password_entry(entry);
+                    } else {
+                        printf("Failed to save password.\n");
+                    }
                 } else {
-                    char *retrieved_password = get_password(username, master_password);
-                    if (retrieved_password != NULL) {
-                        printf("Password for %s: %s\n", username, retrieved_password);
+                    PasswordEntry* retrieved_entry = get_password(username, master_password);
+                    if(retrieved_entry){
+                        printf("Password for %s: %s\n", username, retrieved_entry->enctrypted_password);
+                        free_password_entry(retrieved_entry);
                     } else {
                         printf("Username not found.\n");
                     }
