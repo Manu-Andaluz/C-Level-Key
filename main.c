@@ -324,10 +324,18 @@ int main()
         {'2', "Add new password", add_new_password},           // automatically treated as pointers, the same as &add_new_password
         {'3', "Get existing password", get_existing_password}, // automatically treated as pointers, the same as &get_existing_password
         {'4', "Exit", NULL}};
-    int num_options = sizeof(menu) / sizeof(menu[0]);
     // void (*func_ptr)() = set_master_password;  // This is valid
     // func_ptr();  // This calls the function
     // (*func_ptr)();  // This is equivalent and also calls the function
+
+
+    // Calculate the number of options in the menu array
+    // sizeof(menu) gives the total size of the array in bytes
+    // sizeof(menu[0]) gives the size of a single element in bytes
+    // sizeof(menu) would be 64 (4 * 16)
+    // sizeof(menu[0]) would be 16
+    // 64 / 16 = 4 elements
+    int num_options = sizeof(menu) / sizeof(menu[0]);
 
     char choice;
     while (1)
